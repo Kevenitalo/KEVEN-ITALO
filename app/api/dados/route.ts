@@ -1,4 +1,4 @@
-import { put, list, del } from "@vercel/blob"
+import { put, list, del, get } from "@vercel/blob"
 import { NextResponse } from "next/server"
 import type { DadosCompletos } from "@/lib/types"
 
@@ -7,20 +7,20 @@ const DADOS_FILENAME = "dados-perdas.json"
 // GET - Buscar dados salvos
 export async function GET() {
   try {
-    const { blobs } = await list()
-    const dadosBlob = blobs.find((b) => b.pathname === DADOS_FILENAME)
+    const result = await get(DADOS_FILENAME, { access: "private" })
 
-    if (!dadosBlob) {
+    if (!result) {
       return NextResponse.json({ dados: null })
     }
 
-    const response = await fetch(dadosBlob.url)
-    const dados: DadosCompletos = await response.json()
+    const text = await result.text()
+    const dados: DadosCompletos = JSON.parse(text)
 
     return NextResponse.json({ dados })
   } catch (error) {
+    // Se o arquivo não existir, retorna null
     console.error("Erro ao buscar dados:", error)
-    return NextResponse.json({ error: "Erro ao buscar dados" }, { status: 500 })
+    return NextResponse.json({ dados: null })
   }
 }
 
@@ -36,10 +36,13 @@ export async function POST(request: Request) {
     }
 
     // Deletar arquivo antigo se existir
-    const { blobs } = await list()
-    const dadosBlob = blobs.find((b) => b.pathname === DADOS_FILENAME)
-    if (dadosBlob) {
-      await del(dadosBlob.url)
+    try {
+      const result = await get(DADOS_FILENAME, { access: "private" })
+      if (result) {
+        await del(result.blob.url)
+      }
+    } catch {
+      // Arquivo não existe, ok
     }
 
     // Salvar novos dados
@@ -49,7 +52,7 @@ export async function POST(request: Request) {
     }
 
     await put(DADOS_FILENAME, JSON.stringify(dadosComData), {
-      access: "public",
+      access: "private",
       contentType: "application/json",
     })
 
@@ -71,11 +74,13 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: "Senha incorreta" }, { status: 401 })
     }
 
-    const { blobs } = await list()
-    const dadosBlob = blobs.find((b) => b.pathname === DADOS_FILENAME)
-
-    if (dadosBlob) {
-      await del(dadosBlob.url)
+    try {
+      const result = await get(DADOS_FILENAME, { access: "private" })
+      if (result) {
+        await del(result.blob.url)
+      }
+    } catch {
+      // Arquivo não existe, ok
     }
 
     return NextResponse.json({ success: true })
