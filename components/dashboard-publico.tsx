@@ -1,8 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { createClient } from "@/lib/supabase/client"
-import { DadosPerdas, ItemPerda } from "@/lib/types"
+import { useEffect, useState, useCallback } from "react"
+import { DadosCompletos } from "@/lib/types"
 import { PerdasCards } from "./perdas-cards"
 import { PerdasChart } from "./perdas-chart"
 import { ItensTabela } from "./itens-tabela"
@@ -10,69 +9,27 @@ import { Button } from "@/components/ui/button"
 import { Loader2, RefreshCw, Lock } from "lucide-react"
 import Link from "next/link"
 
-interface PerdasDB {
-  id: number
-  codigo: string
-  descricao: string
-  valor: number
-  categoria: "maturacao" | "avaria" | "vencimento"
-  loja: string
-}
-
 export function DashboardPublico() {
   const [loading, setLoading] = useState(true)
-  const [totais, setTotais] = useState<DadosPerdas | null>(null)
-  const [itens, setItens] = useState<ItemPerda[]>([])
-  const [ultimaAtualizacao, setUltimaAtualizacao] = useState<Date | null>(null)
+  const [dados, setDados] = useState<DadosCompletos | null>(null)
 
-  const carregarDados = async () => {
+  const carregarDados = useCallback(async () => {
     setLoading(true)
-    const supabase = createClient()
 
-    const { data, error } = await supabase
-      .from("perdas")
-      .select("*")
-      .order("categoria", { ascending: true })
-
-    if (error) {
+    try {
+      const res = await fetch("/api/dados")
+      const { dados: dadosCarregados } = await res.json()
+      setDados(dadosCarregados)
+    } catch (error) {
       console.error("Erro ao carregar dados:", error)
+    } finally {
       setLoading(false)
-      return
     }
-
-    const perdas = data as PerdasDB[]
-
-    // Calcular totais
-    const maturacao = perdas
-      .filter((p) => p.categoria === "maturacao")
-      .reduce((acc, p) => acc + Number(p.valor), 0)
-    const avaria = perdas
-      .filter((p) => p.categoria === "avaria")
-      .reduce((acc, p) => acc + Number(p.valor), 0)
-    const vencimento = perdas
-      .filter((p) => p.categoria === "vencimento")
-      .reduce((acc, p) => acc + Number(p.valor), 0)
-
-    setTotais({ maturacao, avaria, vencimento })
-
-    // Converter para ItemPerda
-    const itensConvertidos: ItemPerda[] = perdas.map((p) => ({
-      id: p.id,
-      codigo: p.codigo,
-      descricao: p.descricao,
-      valor: Number(p.valor),
-      categoria: p.categoria,
-      loja: p.loja,
-    }))
-
-    setItens(itensConvertidos)
-    setUltimaAtualizacao(new Date())
-    setLoading(false)
-  }
+  }, [])
 
   useEffect(() => {
     carregarDados()
-  }, [])
+  }, [carregarDados])
 
   if (loading) {
     return (
@@ -85,7 +42,7 @@ export function DashboardPublico() {
     )
   }
 
-  if (!totais || itens.length === 0) {
+  if (!dados) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
         <div className="text-center max-w-md">
@@ -94,7 +51,8 @@ export function DashboardPublico() {
           </div>
           <h2 className="text-xl font-semibold mb-2">Sem dados disponíveis</h2>
           <p className="text-muted-foreground mb-6">
-            Nenhum dado foi carregado ainda. Um administrador precisa fazer upload do arquivo Excel.
+            Nenhum dado foi carregado ainda. Um administrador precisa fazer
+            upload do arquivo Excel.
           </p>
           <Button asChild variant="outline">
             <Link href="/admin">
@@ -107,6 +65,8 @@ export function DashboardPublico() {
     )
   }
 
+  const dataAtualizacao = new Date(dados.atualizadoEm)
+
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b bg-card">
@@ -114,18 +74,16 @@ export function DashboardPublico() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h1 className="text-2xl font-bold">Dashboard de Perdas</h1>
-              {ultimaAtualizacao && (
-                <p className="text-sm text-muted-foreground">
-                  Atualizado em:{" "}
-                  {ultimaAtualizacao.toLocaleDateString("pt-BR", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              )}
+              <p className="text-sm text-muted-foreground">
+                Atualizado em:{" "}
+                {dataAtualizacao.toLocaleDateString("pt-BR", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </p>
             </div>
             <div className="flex gap-2">
               <Button variant="outline" onClick={carregarDados}>
@@ -144,9 +102,9 @@ export function DashboardPublico() {
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
         <div className="space-y-6">
-          <PerdasCards dados={totais} />
-          <PerdasChart dados={totais} />
-          <ItensTabela itens={itens} />
+          <PerdasCards dados={dados.totais} />
+          <PerdasChart dados={dados.totais} />
+          <ItensTabela itens={dados.itens} />
         </div>
       </main>
     </div>

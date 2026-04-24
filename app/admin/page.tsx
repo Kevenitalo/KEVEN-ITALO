@@ -3,48 +3,40 @@
 import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import * as XLSX from "xlsx"
-import { createClient } from "@/lib/supabase/client"
-import { LinhaExcel } from "@/lib/types"
+import { LinhaExcel, ItemPerda, DadosPerdas } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Upload, FileSpreadsheet, Loader2, Lock, CheckCircle, AlertCircle, Trash2 } from "lucide-react"
 
-interface ItemParaSalvar {
-  codigo: string
-  descricao: string
-  valor: number
-  categoria: "maturacao" | "avaria" | "vencimento"
-  loja: string
-}
-
 export default function AdminPage() {
   const [loading, setLoading] = useState(false)
   const [autenticado, setAutenticado] = useState(false)
-  const [senha, setSenha] = useState("")
+  const [senhaInput, setSenhaInput] = useState("")
+  const [senhaAdmin, setSenhaAdmin] = useState("")
   const [erroSenha, setErroSenha] = useState(false)
   const [verificando, setVerificando] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [nomeArquivo, setNomeArquivo] = useState("")
   const [totalItens, setTotalItens] = useState(0)
   const router = useRouter()
-  const supabase = createClient()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     setVerificando(true)
     setErroSenha(false)
-    
+
     try {
       const res = await fetch("/api/admin/verify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ senha }),
+        body: JSON.stringify({ senha: senhaInput }),
       })
-      
+
       if (res.ok) {
         setAutenticado(true)
+        setSenhaAdmin(senhaInput)
       } else {
         setErroSenha(true)
       }
@@ -58,21 +50,21 @@ export default function AdminPage() {
   const processarAba = useCallback(
     (
       sheet: XLSX.WorkSheet,
-      categoria: ItemParaSalvar["categoria"]
-    ): ItemParaSalvar[] => {
+      categoria: ItemPerda["categoria"],
+      startId: number
+    ): { itens: ItemPerda[]; total: number } => {
       const linhas = XLSX.utils.sheet_to_json<LinhaExcel>(sheet)
-      const itens: ItemParaSalvar[] = []
+      const itens: ItemPerda[] = []
+      let total = 0
 
       const colunas = linhas.length > 0 ? Object.keys(linhas[0]) : []
 
       linhas.forEach((linha, index) => {
         const valor = Math.abs(linha["Valor"] || 0)
+        total += valor
 
         if (valor > 0) {
-          const codigo =
-            linha["Produto"] ||
-            linha[colunas[2]] ||
-            "-"
+          const codigo = linha["Produto"] || linha[colunas[2]] || "-"
 
           const descricao =
             linha["Descrição"] ||
@@ -81,12 +73,10 @@ export default function AdminPage() {
             `Item ${index + 1}`
 
           const loja =
-            linha["Loja"] ||
-            linha["Filial"] ||
-            linha["Unidade"] ||
-            "Sem loja"
+            linha["Loja"] || linha["Filial"] || linha["Unidade"] || "Sem loja"
 
           itens.push({
+            id: startId + index,
             codigo: String(codigo),
             descricao: String(descricao),
             valor,
@@ -96,7 +86,7 @@ export default function AdminPage() {
         }
       })
 
-      return itens
+      return { itens, total }
     },
     []
   )
@@ -110,42 +100,46 @@ export default function AdminPage() {
         const buffer = await file.arrayBuffer()
         const workbook = XLSX.read(buffer)
 
-        const maturacaoItens = processarAba(
+        const maturacao = processarAba(
           workbook.Sheets["339(Maturação)"],
-          "maturacao"
+          "maturacao",
+          0
         )
-        const avariaItens = processarAba(
+        const avaria = processarAba(
           workbook.Sheets["334(Avaria)"],
-          "avaria"
+          "avaria",
+          1000
         )
-        const vencimentoItens = processarAba(
+        const vencimento = processarAba(
           workbook.Sheets["338(Vencimento)"],
-          "vencimento"
+          "vencimento",
+          2000
         )
 
-        const todosItens = [...maturacaoItens, ...avariaItens, ...vencimentoItens]
+        const todosItens = [
+          ...maturacao.itens,
+          ...avaria.itens,
+          ...vencimento.itens,
+        ]
 
-        // Deletar dados antigos
-        const { error: deleteError } = await supabase
-          .from("perdas")
-          .delete()
-          .neq("id", 0)
-
-        if (deleteError) {
-          throw new Error("Erro ao limpar dados antigos: " + deleteError.message)
+        const totais: DadosPerdas = {
+          maturacao: maturacao.total,
+          avaria: avaria.total,
+          vencimento: vencimento.total,
         }
 
-        // Inserir novos dados em lotes de 100
-        const batchSize = 100
-        for (let i = 0; i < todosItens.length; i += batchSize) {
-          const batch = todosItens.slice(i, i + batchSize)
-          const { error: insertError } = await supabase
-            .from("perdas")
-            .insert(batch)
+        // Salvar no Vercel Blob
+        const res = await fetch("/api/dados", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dados: { totais, itens: todosItens },
+            senha: senhaAdmin,
+          }),
+        })
 
-          if (insertError) {
-            throw new Error("Erro ao inserir dados: " + insertError.message)
-          }
+        if (!res.ok) {
+          throw new Error("Erro ao salvar dados")
         }
 
         setNomeArquivo(file.name)
@@ -157,13 +151,14 @@ export default function AdminPage() {
       } catch (error) {
         setMessage({
           type: "error",
-          text: error instanceof Error ? error.message : "Erro ao processar arquivo",
+          text:
+            error instanceof Error ? error.message : "Erro ao processar arquivo",
         })
       } finally {
         setLoading(false)
       }
     },
-    [processarAba, supabase]
+    [processarAba, senhaAdmin]
   )
 
   const handleDrop = useCallback(
@@ -179,21 +174,27 @@ export default function AdminPage() {
 
   const handleLimparDados = async () => {
     if (!confirm("Tem certeza que deseja limpar todos os dados?")) return
-    
+
     setLoading(true)
-    const { error } = await supabase
-      .from("perdas")
-      .delete()
-      .neq("id", 0)
-    
-    if (error) {
-      setMessage({ type: "error", text: "Erro ao limpar dados" })
-    } else {
+    try {
+      const res = await fetch("/api/dados", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senha: senhaAdmin }),
+      })
+
+      if (!res.ok) {
+        throw new Error("Erro ao limpar dados")
+      }
+
       setMessage({ type: "success", text: "Dados limpos com sucesso!" })
       setTotalItens(0)
       setNomeArquivo("")
+    } catch {
+      setMessage({ type: "error", text: "Erro ao limpar dados" })
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   // Tela de login com senha
@@ -218,9 +219,9 @@ export default function AdminPage() {
                   id="senha"
                   type="password"
                   placeholder="Digite a senha"
-                  value={senha}
+                  value={senhaInput}
                   onChange={(e) => {
-                    setSenha(e.target.value)
+                    setSenhaInput(e.target.value)
                     setErroSenha(false)
                   }}
                   className={erroSenha ? "border-destructive" : ""}
@@ -268,7 +269,8 @@ export default function AdminPage() {
               Upload de Dados
             </CardTitle>
             <CardDescription>
-              Faça upload do arquivo Excel com os dados de perdas (Maturação, Avaria, Vencimento)
+              Faça upload do arquivo Excel com os dados de perdas (Maturação,
+              Avaria, Vencimento)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">

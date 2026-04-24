@@ -16,6 +16,7 @@ export interface ItemPerda {
 export interface DadosCompletos {
   totais: DadosPerdas
   itens: ItemPerda[]
+  atualizadoEm: string
 }
 
 export interface LinhaExcel {
