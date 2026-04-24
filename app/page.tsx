@@ -1,5 +1,5 @@
-import { DashboardPerdas } from "@/components/dashboard-perdas"
+import { DashboardPublico } from "@/components/dashboard-publico"
 
 export default function Home() {
-  return <DashboardPerdas />
+  return <DashboardPublico />
 }
