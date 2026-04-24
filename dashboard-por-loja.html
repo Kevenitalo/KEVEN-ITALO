@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard de Perdas por Loja</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.0/chart.min.js"></script>
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="text-center">Dashboard de Perdas por Loja</h1>
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <label for="storeFilter">Filtrar por Loja:</label>
+                <select id="storeFilter" class="form-select">
+                    <option value="">Todas as Lojas</option>
+                    <!-- Dynamic store options will be populated here -->
+                </select>
+            </div>
+        </div>
+        <canvas id="lossChart"></canvas>
+        <table class="table table-striped mt-4">
+            <thead>
+                <tr>
+                    <th>Loja</th>
+                    <th>Total de Perdas</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- Dynamic ranking table rows will be populated here -->
+            </tbody>
+        </table>
+    </div>
+    <script>
+        // Sample data
+        const storeData = [
+            { storeNumber: "001", storeName: "Loja A", losses: 100 },
+            { storeNumber: "002", storeName: "Loja B", losses: 200 },
+            { storeNumber: "003", storeName: "Loja C", losses: 150 }
+        ];
+
+        // Populate store filter
+        const storeFilter = document.getElementById('storeFilter');
+        storeData.forEach(store => {
+            const option = document.createElement('option');
+            option.value = store.storeNumber;
+            option.textContent = `${store.storeNumber} - ${store.storeName}`;
+            storeFilter.appendChild(option);
+        });
+
+        // Draw comparison chart
+        const ctx = document.getElementById('lossChart').getContext('2d');
+        const chartData = {
+            labels: storeData.map(store => store.storeName),
+            datasets: [{
+                label: 'Total de Perdas',
+                data: storeData.map(store => store.losses),
+                backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }]
+        };
+        new Chart(ctx, {
+            type: 'bar',
+            data: chartData,
+            options: {
+                scales: {
+                    y: { beginAtZero: true }
+                }
+            }
+        });
+
+        // Populate ranking table
+        const rankingTableBody = document.querySelector('tbody');
+        storeData.forEach(store => {
+            const row = document.createElement('tr');
+            row.innerHTML = `<td>${store.storeName}</td><td>${store.losses}</td>`;
+            rankingTableBody.appendChild(row);
+        });
+    </script>
+</body>
+</html>
