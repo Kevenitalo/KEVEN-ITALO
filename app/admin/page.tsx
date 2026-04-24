@@ -1,13 +1,15 @@
 "use client"
 
-import { useState, useCallback, useEffect } from "react"
+import { useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import * as XLSX from "xlsx"
 import { createClient } from "@/lib/supabase/client"
 import { LinhaExcel } from "@/lib/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Upload, FileSpreadsheet, Loader2, LogOut, CheckCircle, AlertCircle, Trash2 } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Upload, FileSpreadsheet, Loader2, Lock, CheckCircle, AlertCircle, Trash2 } from "lucide-react"
 
 interface ItemParaSalvar {
   codigo: string
@@ -17,25 +19,28 @@ interface ItemParaSalvar {
   loja: string
 }
 
+const SENHA_ADMIN = "admin123" // Altere esta senha
+
 export default function AdminPage() {
   const [loading, setLoading] = useState(false)
-  const [checkingAuth, setCheckingAuth] = useState(true)
+  const [autenticado, setAutenticado] = useState(false)
+  const [senha, setSenha] = useState("")
+  const [erroSenha, setErroSenha] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [nomeArquivo, setNomeArquivo] = useState("")
   const [totalItens, setTotalItens] = useState(0)
   const router = useRouter()
   const supabase = createClient()
 
-  useEffect(() => {
-    const checkUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) {
-        router.push("/auth/login")
-      }
-      setCheckingAuth(false)
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (senha === SENHA_ADMIN) {
+      setAutenticado(true)
+      setErroSenha(false)
+    } else {
+      setErroSenha(true)
     }
-    checkUser()
-  }, [router, supabase.auth])
+  }
 
   const processarAba = useCallback(
     (
@@ -159,11 +164,6 @@ export default function AdminPage() {
     [handleFileUpload]
   )
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push("/")
-  }
-
   const handleLimparDados = async () => {
     if (!confirm("Tem certeza que deseja limpar todos os dados?")) return
     
@@ -183,10 +183,53 @@ export default function AdminPage() {
     setLoading(false)
   }
 
-  if (checkingAuth) {
+  // Tela de login com senha
+  if (!autenticado) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-muted/30">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-screen flex items-center justify-center bg-muted/30 p-4">
+        <Card className="w-full max-w-sm">
+          <CardHeader className="text-center">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+              <Lock className="h-6 w-6 text-primary" />
+            </div>
+            <CardTitle>Acesso Restrito</CardTitle>
+            <CardDescription>
+              Digite a senha para acessar a área administrativa
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="senha">Senha</Label>
+                <Input
+                  id="senha"
+                  type="password"
+                  placeholder="Digite a senha"
+                  value={senha}
+                  onChange={(e) => {
+                    setSenha(e.target.value)
+                    setErroSenha(false)
+                  }}
+                  className={erroSenha ? "border-destructive" : ""}
+                />
+                {erroSenha && (
+                  <p className="text-sm text-destructive">Senha incorreta</p>
+                )}
+              </div>
+              <Button type="submit" className="w-full">
+                Entrar
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="w-full"
+                onClick={() => router.push("/")}
+              >
+                Voltar ao Dashboard
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -199,9 +242,9 @@ export default function AdminPage() {
             <h1 className="text-2xl font-bold">Área Administrativa</h1>
             <p className="text-muted-foreground">Atualize os dados do dashboard</p>
           </div>
-          <Button variant="outline" onClick={handleLogout}>
-            <LogOut className="mr-2 h-4 w-4" />
-            Sair
+          <Button variant="outline" onClick={() => setAutenticado(false)}>
+            <Lock className="mr-2 h-4 w-4" />
+            Bloquear
           </Button>
         </div>
 
