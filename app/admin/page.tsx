@@ -19,26 +19,39 @@ interface ItemParaSalvar {
   loja: string
 }
 
-const SENHA_ADMIN = "admin123" // Altere esta senha
-
 export default function AdminPage() {
   const [loading, setLoading] = useState(false)
   const [autenticado, setAutenticado] = useState(false)
   const [senha, setSenha] = useState("")
   const [erroSenha, setErroSenha] = useState(false)
+  const [verificando, setVerificando] = useState(false)
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null)
   const [nomeArquivo, setNomeArquivo] = useState("")
   const [totalItens, setTotalItens] = useState(0)
   const router = useRouter()
   const supabase = createClient()
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (senha === SENHA_ADMIN) {
-      setAutenticado(true)
-      setErroSenha(false)
-    } else {
+    setVerificando(true)
+    setErroSenha(false)
+    
+    try {
+      const res = await fetch("/api/admin/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ senha }),
+      })
+      
+      if (res.ok) {
+        setAutenticado(true)
+      } else {
+        setErroSenha(true)
+      }
+    } catch {
       setErroSenha(true)
+    } finally {
+      setVerificando(false)
     }
   }
 
@@ -216,8 +229,8 @@ export default function AdminPage() {
                   <p className="text-sm text-destructive">Senha incorreta</p>
                 )}
               </div>
-              <Button type="submit" className="w-full">
-                Entrar
+              <Button type="submit" className="w-full" disabled={verificando}>
+                {verificando ? "Verificando..." : "Entrar"}
               </Button>
               <Button
                 type="button"
