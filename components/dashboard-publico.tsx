@@ -97,7 +97,7 @@ export function DashboardPublico() {
             Nenhum dado foi carregado ainda. Um administrador precisa fazer upload do arquivo Excel.
           </p>
           <Button asChild variant="outline">
-            <Link href="/auth/login">
+            <Link href="/admin">
               <Lock className="mr-2 h-4 w-4" />
               Área Admin
             </Link>
@@ -133,7 +133,7 @@ export function DashboardPublico() {
                 Atualizar
               </Button>
               <Button asChild variant="ghost" size="icon">
-                <Link href="/auth/login">
+                <Link href="/admin">
                   <Lock className="h-4 w-4" />
                 </Link>
               </Button>
